@@ -1,0 +1,209 @@
+--- rldns-1.3/src/main.c	2026-02-21 23:41:26.000000000 +0700
++++ rldns-1.4/src/main.c	2026-02-21 21:26:23.000000000 +0700
+@@ -1,8 +1,8 @@
+ /*
+- * rldns 1.3
++ * rldns 1.4
+  *  (c) Copyright by Indodev All Rights Reserved 
+  * indodev.asia
+- * developed by : Antonius (w1sdom) 
++ * Developed by Antonius (w1sd0m) - bluedragonsec.com
+  *
+  * This program is free software: you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+@@ -599,7 +599,7 @@
+ 	}
+ }
+ 
+-static inline char *parse_enumerate_and_fetch_each_octet_and_just_return_a_name(char *msg)
++static inline char *parse_enumerate_and_fetch_each_octet_and_just_return_a_name(char *msg, int receive_len)
+ {
+ 	int i, j, possible_first_octet_length = 0, possible_second_octet_length = 0, possible_third_octet_length = 0, possible_fourth_octet_length = 0, is_special_tld = 0, x = 0;
+ 	int match = 0, _count_final_offset = 0, start_offset = 0, second_offset = 0, third_offset = 0, fourth_offset = 0, total_offset = 0, retfunc = 0; 
+@@ -611,21 +611,32 @@
+ 	char *_tmp_aname = NULL, *_tmp_cname = NULL;
+ 	int count_len = 0;
+ 	
++	if (msg == NULL) return NULL;
++	if (receive_len < 12) return NULL;
+ 	possible_first_octet_length = (int)msg[12];
+-	possible_second_octet_length = (int)msg[12 + possible_first_octet_length + 1];
++	if (possible_first_octet_length < -1) return NULL;
++	if (12 + possible_first_octet_length + 1 > receive_len) return NULL;
++   	possible_second_octet_length = (int)msg[12 + possible_first_octet_length + 1];
++	if (possible_second_octet_length < -1) return NULL;
+ 	possible_third_octet_length = (int)msg[12 + possible_first_octet_length + possible_second_octet_length + 2];
++	if (possible_third_octet_length < -1) return NULL;
+ 	possible_fourth_octet_length = (int)msg[12 + possible_first_octet_length + possible_second_octet_length + possible_third_octet_length + 3];
+-	total_offset = possible_first_octet_length + possible_second_octet_length + possible_third_octet_length + possible_fourth_octet_length;
++	if (possible_fourth_octet_length < -1) return NULL;
++	total_offset = possible_first_octet_length + possible_second_octet_length + possible_third_octet_length + possible_fourth_octet_length + 4;
+ 	_name = n_malloc(total_offset + 1);
++	if (_name == NULL) return NULL;
++	_name[total_offset] = '\0';
+ 	if (possible_first_octet_length > 0) {
+ 		start_offset = 12;
+ 		j = 0;
+ 		first_octet = n_malloc(possible_first_octet_length);
+-		for(i = 1; i <= possible_first_octet_length; i++)  {
+-			_name[x] = msg[start_offset + i]; 
+-			first_octet[j] = msg[start_offset + i];
+-			x++;
+-			j++;
++		for(i = 1; i < possible_first_octet_length; i++)  {
++			if (x < total_offset) {
++				_name[x] = msg[start_offset + i]; 
++				first_octet[j] = msg[start_offset + i];
++				x++;
++				j++;
++			}
+ 		}
+ 	}
+ 	if (possible_second_octet_length > 0) {	
+@@ -633,11 +644,13 @@
+ 		j = 0;
+ 		second_octet = n_malloc(possible_second_octet_length);
+ 		second_offset = 12 + possible_first_octet_length + 1;	
+-		for(i = 1; i <= possible_second_octet_length; i++) {
+-			_name[x]  = msg[second_offset + i];
+-			second_octet[j] = msg[second_offset + i];
+-			j++;
+-			x++;
++		for(i = 1; i < possible_second_octet_length; i++) {
++			if (x < total_offset) {
++				_name[x]  = msg[second_offset + i];
++				second_octet[j] = msg[second_offset + i];
++				j++;
++				x++;
++			}
+ 		}
+ 	}
+ 	if (possible_third_octet_length > 0) {
+@@ -645,11 +658,13 @@
+ 		j = 0;
+ 		third_offset = 12 + possible_first_octet_length + possible_second_octet_length + 2;
+ 		third_octet = n_malloc(possible_third_octet_length);
+-		for(i = 1; i <= possible_third_octet_length; i++) {
+-			_name[x]  = msg[third_offset + i];
+-			third_octet[j] = msg[third_offset + i];
+-			j++;
+-			x++;
++		for(i = 1; i < possible_third_octet_length; i++) {
++			if (x < total_offset) {
++				_name[x]  = msg[third_offset + i];
++				third_octet[j] = msg[third_offset + i];
++				j++;
++				x++;
++			}
+ 		}
+ 	}
+ 	if (possible_fourth_octet_length > 0) {
+@@ -657,11 +672,13 @@
+ 		_name[x++] = '.';
+ 		fourth_offset = 12 + possible_first_octet_length + possible_second_octet_length + possible_third_octet_length + 3;
+ 		fourth_octet = n_malloc(possible_fourth_octet_length);
+-		for(i = 1; i <= possible_fourth_octet_length; i++) {
+-			_name[x]  = msg[fourth_offset + i];
+-			fourth_octet[j] = msg[fourth_offset + i];
+-			j++;
+-			x++;
++		for(i = 1; i < possible_fourth_octet_length; i++) {
++			if (x < total_offset) {
++				_name[x]  = msg[fourth_offset + i];
++				fourth_octet[j] = msg[fourth_offset + i];
++				j++;
++				x++;
++			}
+ 		}
+ 	}
+ 	_count_final_offset = _count_octet_length(_name);
+@@ -678,7 +695,8 @@
+ 	}
+ 	else {
+ 		for (j = 0; j < (sizeof(special_tld) / divide_by); j++) {
+-			if (strstr(_name, special_tld[j]) != NULL) 
++			//if (strstr(_name, special_tld[j]) != NULL) 
++			if (memmem(_name, count_len, special_tld[j], strlen(special_tld[j])) != NULL)
+ 				is_special_tld = 1;
+ 		}	
+ 		if (is_special_tld == 1) {
+@@ -994,7 +1012,7 @@
+ 	return return_request_type;
+ }
+ 
+-static inline unsigned int analyze_invalid_dns_request(char *dns_packet)
++static inline unsigned int analyze_invalid_dns_request(char *dns_packet, int receive)
+ {
+ 	int a_length = 0, valid = 1;
+ 	
+@@ -1005,7 +1023,7 @@
+ 	else if (((int)dns_packet[12] > MAX_A_LENGTH_ALLOWED) || (int)dns_packet[12] <= 1) 
+ 		valid = 0;
+ 	else {		
+-		a_length = parse_enumerate_each_octet_and_count_length(dns_packet);
++		a_length = parse_enumerate_each_octet_and_count_length(dns_packet, receive);
+ 		if (a_length <= 0) 
+ 			valid = 0;
+ 	}
+@@ -1303,11 +1321,16 @@
+ 	return ret_val_res;
+ }
+ 
+-static inline unsigned int parse_enumerate_each_octet_and_count_length(char *msg)
++static inline unsigned int parse_enumerate_each_octet_and_count_length(char *msg, int receive)
+ {
+ 	int a_length = 0;
+ 	int possible_first_octet_length, possible_second_octet_length, possible_third_octet_length, possible_fourth_octet_length;
+-	
++	char *qname = NULL;
++
++	qname = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(msg, receive);
++	if (qname == NULL) {
++		return 0;
++	}
+ 	possible_first_octet_length = (int)msg[12];
+ 	possible_second_octet_length = (int)msg[12 + possible_first_octet_length + 1];
+ 	possible_third_octet_length = (int)msg[12 + possible_first_octet_length + possible_second_octet_length + 2];
+@@ -1443,6 +1466,8 @@
+ 			else {
+ 				bzero(buffer, sizeof(buffer));
+ 				rcv = recvfrom(__udp_sock, buffer, PACKET_SIZE, 0, (struct sockaddr *) &server_addr, (socklen_t * __restrict__)&len);
++				if (rcv > 512) 
++					goto _get_out_of_here_its_gonna_blow;
+ 				if (rcv != -1) {
+ 					_retme = n_malloc(PACKET_SIZE);
+ 					for (i = 0;i < PACKET_SIZE; i++) 
+@@ -1468,7 +1493,7 @@
+ 	char *a_name, *my_dns_response = NULL;
+ 	int i;
+ 
+-	a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_response);
++	a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_response, receive);
+ 	for (i = 0; i < zone_count; i++) {
+ 		if ((strcmp((_ret_st_mainstruct_domain_zone + i)->domain_zone, a_name)) == 0) 
+ 			my_dns_response = do_craft_dns_ns_response(qid, dns_response, receive, i, a_name);
+@@ -1608,7 +1633,7 @@
+ 	char *a_name = NULL, *my_dns_response = NULL;
+ 	int i;
+ 
+-	a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_response);
++	a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_response, receive);
+ 	if (a_name != NULL) {
+ 		for (i = 0; i < zone_count; i++) {
+ 			if ((strcmp((_ret_st_mainstruct_domain_zone + i)->domain_zone, a_name)) == 0) {
+@@ -1932,13 +1957,13 @@
+ 				generic_answer_type = NULL;
+ 				valid_dns = 1;
+ 				/* blocking some malformed dns request */
+-				valid_dns = analyze_invalid_dns_request(dns_packet);
++				valid_dns = analyze_invalid_dns_request(dns_packet, receive);
+ 				if (valid_dns == 0) 
+ 					goto repeat;
+ 				client_ip = inet_ntoa(client_addr.sin_addr);
+ 				(_ret_st_struct_current_dns_resp + rldns_response_id)->_cur_receive = receive;
+ 				rldns_log(LOG_IP, client_ip);
+-				a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_packet);
++				a_name = parse_enumerate_and_fetch_each_octet_and_just_return_a_name(dns_packet, receive);
+ 				a_length = strlen(a_name);
+ 				if ((strlen(dns_packet) <= PACKET_SIZE) && (a_length < MAX_A_LENGTH_ALLOWED) && (a_length > 3)) {
+ 					recursive_req = 0;
